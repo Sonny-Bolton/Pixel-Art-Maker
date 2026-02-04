@@ -1,250 +1,183 @@
-// Canvas and context
-const canvas = document.getElementById('pixelCanvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("pixelCanvas");
+const ctx = canvas.getContext("2d");
+const zoomCanvas = document.getElementById("zoomCanvas");
+const zoomCtx = zoomCanvas.getContext("2d");
 
-// UI Elements
-const colorPicker = document.getElementById('colorPicker');
-const penTool = document.getElementById('penTool');
-const eraserTool = document.getElementById('eraserTool');
-const gridSizeSelect = document.getElementById('gridSize');
-const gridToggle = document.getElementById('gridToggle');
-const clearBtn = document.getElementById('clearBtn');
-const exportBtn = document.getElementById('exportBtn');
+canvas.width = canvas.height = 512;
+zoomCanvas.width = zoomCanvas.height = 128;
 
-// State
+const colorPicker = document.getElementById("colorPicker");
+const penTool = document.getElementById("penTool");
+const eraserTool = document.getElementById("eraserTool");
+const fillTool = document.getElementById("fillTool");
+const gridSizeSelect = document.getElementById("gridSize");
+const undoBtn = document.getElementById("undoBtn");
+const redoBtn = document.getElementById("redoBtn");
+const saveBtn = document.getElementById("saveBtn");
+const loadBtn = document.getElementById("loadBtn");
+const clearBtn = document.getElementById("clearBtn");
+const exportBtn = document.getElementById("exportBtn");
+
 let gridSize = 16;
-let pixelSize = 0;
-let currentColor = '#000000';
-let isDrawing = false;
-let isEraser = false;
-let showGrid = true;
-let pixels = []; // 2D array to store pixel colors
+let pixelSize = canvas.width / gridSize;
+let pixels = [];
+let tool = "pen";
+let color = "#000000";
+let drawing = false;
 
-// Initialize the canvas
-function initCanvas() {
-    // Set canvas size (fixed at 512x512 for consistent quality)
-    const canvasWidth = 512;
-    const canvasHeight = 512;
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    
-    // Calculate pixel size based on grid
-    pixelSize = canvasWidth / gridSize;
-    
-    // Initialize pixels array
-    pixels = Array(gridSize).fill(null).map(() => Array(gridSize).fill(null));
-    
-    // Clear and draw initial state
-    clearCanvas();
+let undoStack = [];
+let redoStack = [];
+
+function init() {
+  pixels = Array.from({ length: gridSize }, () =>
+    Array(gridSize).fill(null)
+  );
+  pixelSize = canvas.width / gridSize;
+  saveState();
+  draw();
 }
 
-// Draw the entire canvas
-function drawCanvas() {
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw pixels
-    for (let row = 0; row < gridSize; row++) {
-        for (let col = 0; col < gridSize; col++) {
-            if (pixels[row][col]) {
-                ctx.fillStyle = pixels[row][col];
-                ctx.fillRect(col * pixelSize, row * pixelSize, pixelSize, pixelSize);
-            }
-        }
-    }
-    
-    // Draw grid lines if enabled
-    if (showGrid) {
-        drawGrid();
-    }
+function saveState() {
+  undoStack.push(JSON.stringify(pixels));
+  redoStack = [];
 }
 
-// Draw grid lines
-function drawGrid() {
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 1;
-    
-    // Vertical lines
-    for (let i = 0; i <= gridSize; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * pixelSize, 0);
-        ctx.lineTo(i * pixelSize, canvas.height);
-        ctx.stroke();
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      if (pixels[r][c]) {
+        ctx.fillStyle = pixels[r][c];
+        ctx.fillRect(c * pixelSize, r * pixelSize, pixelSize, pixelSize);
+      }
     }
-    
-    // Horizontal lines
-    for (let i = 0; i <= gridSize; i++) {
-        ctx.beginPath();
-        ctx.moveTo(0, i * pixelSize);
-        ctx.lineTo(canvas.width, i * pixelSize);
-        ctx.stroke();
-    }
+  }
+
+  ctx.strokeStyle = "#e5e7eb";
+  for (let i = 0; i <= gridSize; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * pixelSize, 0);
+    ctx.lineTo(i * pixelSize, canvas.height);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0, i * pixelSize);
+    ctx.lineTo(canvas.width, i * pixelSize);
+    ctx.stroke();
+  }
 }
 
-// Get grid coordinates from mouse position
-function getGridCoordinates(e) {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-    
-    const col = Math.floor(x / pixelSize);
-    const row = Math.floor(y / pixelSize);
-    
-    return { row, col };
+function getCell(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+  return {
+    row: Math.floor(y / pixelSize),
+    col: Math.floor(x / pixelSize)
+  };
 }
 
-// Paint a pixel
-function paintPixel(row, col) {
-    if (row >= 0 && row < gridSize && col >= 0 && col < gridSize) {
-        pixels[row][col] = isEraser ? null : currentColor;
-        drawCanvas();
-    }
+function floodFill(r, c, target, replacement) {
+  if (target === replacement) return;
+  if (r < 0 || c < 0 || r >= gridSize || c >= gridSize) return;
+  if (pixels[r][c] !== target) return;
+
+  pixels[r][c] = replacement;
+  floodFill(r + 1, c, target, replacement);
+  floodFill(r - 1, c, target, replacement);
+  floodFill(r, c + 1, target, replacement);
+  floodFill(r, c - 1, target, replacement);
 }
 
-// Clear the canvas
-function clearCanvas() {
-    pixels = Array(gridSize).fill(null).map(() => Array(gridSize).fill(null));
-    drawCanvas();
+canvas.addEventListener("mousedown", e => {
+  drawing = true;
+  saveState();
+  const { row, col } = getCell(e);
+
+  if (tool === "fill") {
+    floodFill(row, col, pixels[row][col], color);
+  } else {
+    pixels[row][col] = tool === "eraser" ? null : color;
+  }
+  draw();
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (!drawing) return;
+  const { row, col } = getCell(e);
+  if (tool === "pen") pixels[row][col] = color;
+  if (tool === "eraser") pixels[row][col] = null;
+  draw();
+  drawZoom(row, col);
+});
+
+canvas.addEventListener("mouseup", () => drawing = false);
+canvas.addEventListener("mouseleave", () => drawing = false);
+
+function drawZoom(r, c) {
+  zoomCtx.imageSmoothingEnabled = false;
+  zoomCtx.clearRect(0, 0, 128, 128);
+  zoomCtx.drawImage(
+    canvas,
+    c * pixelSize - pixelSize,
+    r * pixelSize - pixelSize,
+    pixelSize * 3,
+    pixelSize * 3,
+    0,
+    0,
+    128,
+    128
+  );
 }
 
-// Export canvas as PNG
-function exportCanvas() {
-    // Create a temporary canvas without grid lines
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tempCtx = tempCanvas.getContext('2d');
-    
-    // Draw only the pixels (no grid)
-    for (let row = 0; row < gridSize; row++) {
-        for (let col = 0; col < gridSize; col++) {
-            if (pixels[row][col]) {
-                tempCtx.fillStyle = pixels[row][col];
-                tempCtx.fillRect(col * pixelSize, row * pixelSize, pixelSize, pixelSize);
-            }
-        }
-    }
-    
-    // Convert to blob and download
-    tempCanvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = `pixel-art-${Date.now()}.png`;
-        link.href = url;
-        link.click();
-        URL.revokeObjectURL(url);
-    });
-}
+penTool.onclick = () => tool = "pen";
+eraserTool.onclick = () => tool = "eraser";
+fillTool.onclick = () => tool = "fill";
 
-// Event Listeners
+colorPicker.oninput = e => color = e.target.value;
 
-// Mouse events for drawing
-canvas.addEventListener('mousedown', (e) => {
-    isDrawing = true;
-    const { row, col } = getGridCoordinates(e);
-    paintPixel(row, col);
-});
+gridSizeSelect.onchange = e => {
+  gridSize = +e.target.value;
+  init();
+};
 
-canvas.addEventListener('mousemove', (e) => {
-    if (isDrawing) {
-        const { row, col } = getGridCoordinates(e);
-        paintPixel(row, col);
-    }
-});
+undoBtn.onclick = () => {
+  if (undoStack.length > 1) {
+    redoStack.push(undoStack.pop());
+    pixels = JSON.parse(undoStack[undoStack.length - 1]);
+    draw();
+  }
+};
 
-canvas.addEventListener('mouseup', () => {
-    isDrawing = false;
-});
+redoBtn.onclick = () => {
+  if (redoStack.length) {
+    const state = redoStack.pop();
+    undoStack.push(state);
+    pixels = JSON.parse(state);
+    draw();
+  }
+};
 
-canvas.addEventListener('mouseleave', () => {
-    isDrawing = false;
-});
+saveBtn.onclick = () =>
+  localStorage.setItem("pixelArt", JSON.stringify(pixels));
 
-// Right-click to erase (prevent context menu)
-canvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    const { row, col } = getGridCoordinates(e);
-    pixels[row][col] = null;
-    drawCanvas();
-});
+loadBtn.onclick = () => {
+  const data = localStorage.getItem("pixelArt");
+  if (data) {
+    pixels = JSON.parse(data);
+    draw();
+  }
+};
 
-// Touch events for mobile support
-canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    isDrawing = true;
-    const touch = e.touches[0];
-    const mouseEvent = new MouseEvent('mousedown', {
-        clientX: touch.clientX,
-        clientY: touch.clientY
-    });
-    canvas.dispatchEvent(mouseEvent);
-});
+clearBtn.onclick = () => {
+  if (confirm("Clear canvas?")) init();
+};
 
-canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    if (isDrawing) {
-        const touch = e.touches[0];
-        const mouseEvent = new MouseEvent('mousemove', {
-            clientX: touch.clientX,
-            clientY: touch.clientY
-        });
-        canvas.dispatchEvent(mouseEvent);
-    }
-});
+exportBtn.onclick = () => {
+  const link = document.createElement("a");
+  link.download = "pixel-art.png";
+  link.href = canvas.toDataURL();
+  link.click();
+};
 
-canvas.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    isDrawing = false;
-});
-
-// Color picker
-colorPicker.addEventListener('input', (e) => {
-    currentColor = e.target.value;
-    if (isEraser) {
-        // Switch back to pen when color is changed
-        isEraser = false;
-        penTool.classList.add('active');
-        eraserTool.classList.remove('active');
-    }
-});
-
-// Tool selection
-penTool.addEventListener('click', () => {
-    isEraser = false;
-    penTool.classList.add('active');
-    eraserTool.classList.remove('active');
-});
-
-eraserTool.addEventListener('click', () => {
-    isEraser = true;
-    eraserTool.classList.add('active');
-    penTool.classList.remove('active');
-});
-
-// Grid size change
-gridSizeSelect.addEventListener('change', (e) => {
-    gridSize = parseInt(e.target.value);
-    initCanvas();
-});
-
-// Grid toggle
-gridToggle.addEventListener('change', (e) => {
-    showGrid = e.target.checked;
-    drawCanvas();
-});
-
-// Clear button
-clearBtn.addEventListener('click', () => {
-    if (confirm('Are you sure you want to clear the canvas?')) {
-        clearCanvas();
-    }
-});
-
-//Export button
-exportBtn.addEventListener('click', exportCanvas);
-
-//Initialize on load
-initCanvas();
+init();
