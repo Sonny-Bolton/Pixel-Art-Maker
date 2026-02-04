@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Pixel Art Maker</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="container">
-    <h1>Pixel Art Maker</h1>
+    <header>
+      <h1>Pixel Art Maker</h1>
+    </header>
 
     <div class="toolbar">
       <div class="tool-group">
@@ -16,10 +17,12 @@
         <input type="color" id="colorPicker" value="#000000">
       </div>
 
+      <div class="tool-group palette" id="palette"></div>
+
       <div class="tool-group">
-        <button id="penTool" class="tool-btn active">Pen</button>
-        <button id="eraserTool" class="tool-btn">Eraser</button>
-        <button id="fillTool" class="tool-btn">Fill</button>
+        <button id="penTool" class="tool-btn active">✏️</button>
+        <button id="eraserTool" class="tool-btn">🧽</button>
+        <button id="fillTool" class="tool-btn">🪣</button>
       </div>
 
       <div class="tool-group">
@@ -32,18 +35,30 @@
       </div>
 
       <div class="tool-group">
+        <label><input type="checkbox" id="symX"> Sym X</label>
+        <label><input type="checkbox" id="symY"> Sym Y</label>
+      </div>
+
+      <div class="tool-group">
+        <label><input type="checkbox" id="gridSnap" checked> Snap</label>
+        <label><input type="checkbox" id="darkMode"> 🌙</label>
+      </div>
+
+      <div class="tool-group">
         <button id="undoBtn">Undo</button>
         <button id="redoBtn">Redo</button>
       </div>
 
       <div class="tool-group">
-        <button id="saveBtn">Save</button>
-        <button id="loadBtn">Load</button>
+        <button id="addFrameBtn">+ Frame</button>
+        <select id="frameSelect"></select>
       </div>
 
       <div class="tool-group">
+        <button id="saveBtn">Save</button>
+        <button id="loadBtn">Load</button>
         <button id="clearBtn">Clear</button>
-        <button id="exportBtn">Export PNG</button>
+        <button id="exportBtn">Export</button>
       </div>
     </div>
 
@@ -51,6 +66,10 @@
       <canvas id="pixelCanvas"></canvas>
       <canvas id="zoomCanvas"></canvas>
     </div>
+
+    <footer>
+      <p>Pixel Art Maker — Advanced Edition</p>
+    </footer>
   </div>
 
   <script src="script.js"></script>
